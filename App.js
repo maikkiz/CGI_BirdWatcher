@@ -1,33 +1,48 @@
 import React, { useState } from 'react';
-import { StyleSheet, Text, View, ScrollView, Image, TouchableOpacity } from 'react-native';
+import { StyleSheet, Text, View, ScrollView,  Alert } from 'react-native';
 import { Header, Button, Input, ListItem } from 'react-native-elements';
 import RNPickerSelect from 'react-native-picker-select';
 import * as SQLite from 'expo-sqlite';
 import Modal from 'react-native-modal';
 import Icon from 'react-native-vector-icons/EvilIcons';
+import * as Location from 'expo-location';
+import * as Permissions from 'expo-permissions';
 
 export default function App() {
 
   const [species, setSpecies] = useState('');
   const [rarity, setRarity] = useState('');
   const [notes, setNotes] = useState('');
-  const [timestamp, setTimestamp] = useState('');
+  const [timestamp, setTimestamp] = useState(null);
   const [observations, setObservations] = useState([]);
   const [isModalVisible, setIsModalVisible] = useState(false);
+  const [longitude, setLongitude] = useState(null);
+  const [latitude, setLatitude] = useState(null);
+  const [saving, setSaving] = useState('');
 
-  const toggleModal = () => {
-    setIsModalVisible(!isModalVisible);
-  };
-
-  const database = SQLite.openDatabase('observations.database');
+  const db = SQLite.openDatabase('observationsdb.db');
 
   React.useEffect(() => {
-    database.transaction(tx  => {
-      tx.executeSql('create table if not exists species (id integer primary key not null, species text, notes text, rarity text, timestamp integer);');
+    db.transaction(tx  => {
+      tx.executeSql('create table if not exists observation (id integer primary key not null, species text, notes text, rarity text, timestamp text, longitude integer, latitude integer);');
     });
     updateList();
+    getLocation();
     getTimestamp();
+    console.log(latitude);
   }, []);
+
+  const getLocation = async () => {
+    let { status } = await Permissions.askAsync(Permissions.LOCATION);
+    if (status !== 'granted') {
+      Alert.alert('No permission to access location');
+    }
+    else {
+      let location = await Location.getCurrentPositionAsync({});
+      setLongitude(JSON.stringify(location.coords.longitude));
+      setLatitude(JSON.stringify(location.coords.latitude));
+    }
+  };
 
   const getTimestamp = () => {
     var date = new Date().getDate(); //Current Date
@@ -37,61 +52,55 @@ export default function App() {
     var min = new Date().getMinutes(); //Current Minutes
 
     if (min < 10) {
-      min = '0' + min;
+      setTimestamp(date + '.' + month + '.' + year + ' ' + hours + ':0' + min);
     }
-    setTimestamp(date + '.' + month + '.' + year + ' ' + hours + ':' + min);
-  }
+    else {
+      setTimestamp(date + '.' + month + '.' + year + ' ' + hours + ':' + min);
+    }
+  };
 
-  const saveObservation = () => {
-    getTimestamp();
-  
-    database.transaction(tx => {
-      tx.executeSql('insert into species (species, notes, rarity, timestamp) values (?, ?, ?, ?);',
-      [species, notes, rarity, timestamp]);
-    }, null, updateList
-    )
+  const toggleModal = () => {
+    setIsModalVisible(!isModalVisible);
     setSpecies('');
     setRarity('');
     setNotes('');
-    setTimestamp('');
-  }
+  };
+
+  const saveObservation = async () => {
+    Waiter();
+    await getLocation();
+    getTimestamp();
+
+    while (longitude == 0 && latitude == 0) {
+      console.log('Waiting for coordinates...');
+    };
+  
+    db.transaction(tx => {
+      tx.executeSql('insert into observation (species, notes, rarity, timestamp, longitude, latitude) values (?, ?, ?, ?. ?, ?);',
+      [species, notes, rarity, timestamp, longitude, latitude]);
+      toggleModal();
+    }, null, updateList
+    )
+    console.log(observations);
+  };
 
   const updateList = () => {
-    database.transaction(tx => {
-      tx.executeSql('select * from species;', [], (_, { rows}) =>
+    db.transaction(tx => {
+      tx.executeSql('select * from observation;', [], (_, { rows }) =>
       setObservations(rows._array)
       );
     });
-  }
-
-  const cancelObservation = () => {
-    setSpecies('');
-    setRarity('');
-    setNotes('');
-    setTimestamp('');
-  }
+  };
 
   const deleteObservation = (id) => {
-    database.transaction(tx => {
-      tx.executeSql('delete from species where id = ?;', [id]);}, 
+    db.transaction(tx => {
+      tx.executeSql('delete from observation where id = ?;', [id]);}, 
       null, updateList
     )
-  }
+  };
 
-  const sortByRarity = () => {
-    sortedList.sort((a, b) => b.rarity > a.rarity); 
-    console.log(observations)
-  }
-
-  const sortBySpecies = () => {
-    sortedList.sort((a, b) => a.species > b.species);
-    console.log(observations)
-  }
-
-  const sortByDateTime = () => {
-    sortedList.sort((a, b) => b.id - a.id);
-    console.log(observations)
-
+  const Waiter = () => {
+    setSaving('Saving... May take a few seconds!');
   }
 
   const placeholder = {
@@ -131,54 +140,6 @@ export default function App() {
       />
       <ScrollView>
         <Text style={{textAlign: 'center', fontSize: 25, marginTop: 10}}>List of observations </Text>
-        <Text style={{textAlign: 'center', marginTop: 10, fontSize: 18}}>Sort by... </Text>
-        <View style={{flexDirection: 'row', justifyContent: 'space-evenly'}}>
-        <Button 
-        type="outline" 
-        onPress={sortByRarity}       
-        buttonStyle={{
-          marginTop: 20,
-          marginBottom: 10,
-         
-          borderColor: 'grey',
-        }}
-        titleStyle={{
-          color: 'grey',
-          fontSize: 18
-        }}
-        title="Rarity" 
-      />
-       <Button 
-        type="outline" 
-        onPress={sortBySpecies}       
-        buttonStyle={{
-          marginTop: 20,
-          marginBottom: 10,
-         
-          borderColor: 'grey',
-        }}
-        titleStyle={{
-          color: 'grey',
-          fontSize: 18
-        }}
-        title="Species" 
-      />
-       <Button 
-        type="outline" 
-        onPress={sortByDateTime}       
-        buttonStyle={{
-          marginTop: 20,
-          marginBottom: 10,
-        
-          borderColor: 'grey',
-        }}
-        titleStyle={{
-          color: 'grey',
-          fontSize: 18
-        }}
-        title="Date & time" 
-      />
-      </View>
         {
           sortedList.map((bird, index) => (
             <ListItem
@@ -193,16 +154,22 @@ export default function App() {
                   <Text style={{fontSize: 15}}>Notes: {bird.notes}</Text>
                   <Text style={{fontSize: 15}}>Rarity: {bird.rarity}</Text>
                   <Text style={{fontSize: 15}}>Date and time: {bird.timestamp}</Text>
+                  <Text style={{fontSize: 15}}>Longitude: {bird.longitude}</Text>
+                  <Text style={{fontSize: 15}}>Latitude: {bird.latitude}</Text>
                 </View>
               }
-         
-              
               rightIcon={
                 <Icon
                 name='close'
                 color='grey'
                 size={30}
-                onPress={() => deleteObservation(bird.id)}
+                onPress={() => Alert.alert('Are you sure you want to delete this observation?', '',
+                [
+                  {text: 'Cancel', onPress: () => console.log('Deletion cancelled'), style: 'cancel'},
+                  {text: 'Delete', onPress: () => {deleteObservation(bird.id)}},
+                ],
+                { cancelable: false }
+                )}
                 />
               }
               bottomDivider
@@ -267,11 +234,9 @@ export default function App() {
           <View style={{flexDirection: 'row', justifyContent: 'space-evenly', marginBottom: 15}}>
             <Button 
               type="outline" 
-              onPress={cancelObservation}
-              onPressIn={toggleModal}       
+              onPress={toggleModal}       
               buttonStyle={{
-                marginTop: 20,
-                
+                marginTop: 20, 
                 borderColor: 'red',
                 width: 100
               }}
@@ -283,11 +248,9 @@ export default function App() {
             />
             <Button 
               type="outline" 
-              onPress={saveObservation}
-              onPressIn={toggleModal}       
+              onPress={saveObservation}   
               buttonStyle={{
                 marginTop: 20,
-               
                 borderColor: 'green',
                 width: 100
               }}
@@ -298,6 +261,7 @@ export default function App() {
               title="Save" 
             />
           </View>
+          <Text style={{textAlign:'center', fontSize:16, marginTop:2,marginBottom:10}}>{saving}</Text>
         </View>
       </Modal>
     </View>
