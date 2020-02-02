@@ -10,6 +10,7 @@ import * as Permissions from 'expo-permissions';
 
 export default function App() {
 
+  //setting up hooks
   const [species, setSpecies] = useState('');
   const [rarity, setRarity] = useState('');
   const [notes, setNotes] = useState('');
@@ -18,10 +19,11 @@ export default function App() {
   const [isModalVisible, setIsModalVisible] = useState(false);
   const [longitude, setLongitude] = useState(null);
   const [latitude, setLatitude] = useState(null);
-  const [saving, setSaving] = useState('');
 
+  //opening the database
   const db = SQLite.openDatabase('observationsdb.db');
 
+  //creating the database in useEffect hooks by using tx.executeSql method
   React.useEffect(() => {
     db.transaction(tx  => {
       tx.executeSql('create table if not exists observation (id integer primary key not null, species text, notes text, rarity text, timestamp text, longitude integer, latitude integer);');
@@ -29,9 +31,11 @@ export default function App() {
     updateList();
     getLocation();
     getTimestamp();
-    console.log(latitude);
   }, []);
 
+  //getting the location on whitch the observation is made
+  //checking the devices permissions on accessing location information
+  //setting the coordinates using JSON.stringify
   const getLocation = async () => {
     let { status } = await Permissions.askAsync(Permissions.LOCATION);
     if (status !== 'granted') {
@@ -44,12 +48,13 @@ export default function App() {
     }
   };
 
+  //getting the date and time in whitch the observation is made
   const getTimestamp = () => {
-    var date = new Date().getDate(); //Current Date
-    var month = new Date().getMonth() + 1; //Current Month
-    var year = new Date().getFullYear(); //Current Year
-    var hours = new Date().getHours(); //Current Hours
-    var min = new Date().getMinutes(); //Current Minutes
+    var date = new Date().getDate();        //Current Date
+    var month = new Date().getMonth() + 1;  //Current Month
+    var year = new Date().getFullYear();    //Current Year
+    var hours = new Date().getHours();      //Current Hours
+    var min = new Date().getMinutes();      //Current Minutes
 
     if (min < 10) {
       setTimestamp(date + '.' + month + '.' + year + ' ' + hours + ':0' + min);
@@ -59,6 +64,8 @@ export default function App() {
     }
   };
 
+  //method for opening and closing modal
+  //also empties the inputs
   const toggleModal = () => {
     setIsModalVisible(!isModalVisible);
     setSpecies('');
@@ -66,24 +73,22 @@ export default function App() {
     setNotes('');
   };
 
+  //creating the save funktion that saves the observation onPress
+  //calling the getTimestamp and getLocation methods for saving the date and time and coordinates of the observation
+  //calling the updateList method for rerendering the list
   const saveObservation = async () => {
-    Waiter();
     await getLocation();
     getTimestamp();
-
-    while (longitude == 0 && latitude == 0) {
-      console.log('Waiting for coordinates...');
-    };
   
     db.transaction(tx => {
-      tx.executeSql('insert into observation (species, notes, rarity, timestamp, longitude, latitude) values (?, ?, ?, ?. ?, ?);',
+      tx.executeSql('insert into observation (species, notes, rarity, timestamp, longitude, latitude) values (?, ?, ?, ?, ?, ?);',
       [species, notes, rarity, timestamp, longitude, latitude]);
       toggleModal();
     }, null, updateList
     )
-    console.log(observations);
   };
 
+  //method fetches all observations from the table for updating and rerendering the list
   const updateList = () => {
     db.transaction(tx => {
       tx.executeSql('select * from observation;', [], (_, { rows }) =>
@@ -92,6 +97,7 @@ export default function App() {
     });
   };
 
+  //method for deleting observation from the list
   const deleteObservation = (id) => {
     db.transaction(tx => {
       tx.executeSql('delete from observation where id = ?;', [id]);}, 
@@ -99,10 +105,7 @@ export default function App() {
     )
   };
 
-  const Waiter = () => {
-    setSaving('Saving... May take a few seconds!');
-  }
-
+  //creating the placeholder for the picker
   const placeholder = {
     label: 'Select rarity...',
     value: null,
@@ -110,6 +113,7 @@ export default function App() {
     marginLeft: 10
   };
 
+  //creating the items for the picker
   const pickerItems = [
     {
       label: 'Common',
@@ -125,6 +129,7 @@ export default function App() {
     },
   ];
  
+  //creating a copy of the original observations list and sorting it
   const sortedList = observations.slice().sort((a, b) => b.id - a.id);
   
   return (
@@ -160,16 +165,16 @@ export default function App() {
               }
               rightIcon={
                 <Icon
-                name='close'
-                color='grey'
-                size={30}
-                onPress={() => Alert.alert('Are you sure you want to delete this observation?', '',
-                [
-                  {text: 'Cancel', onPress: () => console.log('Deletion cancelled'), style: 'cancel'},
-                  {text: 'Delete', onPress: () => {deleteObservation(bird.id)}},
-                ],
-                { cancelable: false }
-                )}
+                  name='close'
+                  color='grey'
+                  size={30}
+                  onPress={() => Alert.alert('Are you sure you want to delete this observation?', '',
+                  [
+                    {text: 'Cancel', onPress: () => console.log('Deletion cancelled'), style: 'cancel'},
+                    {text: 'Delete', onPress: () => {deleteObservation(bird.id)}},
+                  ],
+                  { cancelable: false }
+                  )}
                 />
               }
               bottomDivider
@@ -230,7 +235,7 @@ export default function App() {
               paddingLeft: 5 }}
               items={pickerItems}
           />
-             
+          <Text style={{fontSize:16, marginTop: 5, marginLeft: 15}}>On save the app will also record date & time and coordinates.</Text>
           <View style={{flexDirection: 'row', justifyContent: 'space-evenly', marginBottom: 15}}>
             <Button 
               type="outline" 
@@ -246,6 +251,7 @@ export default function App() {
               }}
               title="Cancel" 
             />
+           
             <Button 
               type="outline" 
               onPress={saveObservation}   
@@ -261,7 +267,6 @@ export default function App() {
               title="Save" 
             />
           </View>
-          <Text style={{textAlign:'center', fontSize:16, marginTop:2,marginBottom:10}}>{saving}</Text>
         </View>
       </Modal>
     </View>
@@ -272,12 +277,6 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#fff',
-    
-  },
-  thumbnail: {
-    width: 300,
-    height: 300,
-    resizeMode: "cover"
   }
 });
 
